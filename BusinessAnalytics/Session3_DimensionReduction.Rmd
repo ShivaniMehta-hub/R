@@ -1,0 +1,151 @@
+---
+title: "Dimension Reduction"
+output:
+  html_notebook:
+    theme: spacelab
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+date: "`r Sys.Date()`"
+---
+
+**BUAN6356:  RCode Session3 **
+
+```{r}
+data(package="mlbench")
+```
+
+
+### Load packages
+```{r loadPackages, warning=FALSE, message=FALSE, results='hide' }
+#if(!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, reshape, gplots, ggmap, 
+               mlbench, data.table)
+search()
+theme_set(theme_classic())
+```
+
+### Read in the Data
+```{r readData}
+# Read in Boston Housing data
+data("BostonHousing")
+
+# data.table
+housing.dt <- setDT(BostonHousing)
+housing.dt[, cat.medv := ifelse(medv>30, 1, 0)] # create a categorical variable for home price >30
+housing.dt
+```
+
+
+### Generate basic stats
+```{r basicStats}
+# Compute Statistics - mean, standard dev, min, max, median, length, and missing values of CRIM
+housing.dt[, .(mean=mean(crim), sd=sd(crim), 
+               minimum=min(crim), maximum=max(crim),
+               median=median(crim)), by=chas]
+
+
+  # number of non-missing values of crim variable
+housing.dt[, sum(!is.na(crim))]
+
+  # number of nonmissing variables in a row
+housing.dt[, num_no_miss_vars := rowSums(!is.na(housing.dt))][]
+
+```
+
+
+
+
+```{r corrMatrix}
+# data frame
+housing.df <- setDF(housing.dt) #converting data table to data frame 
+#data table does not work with all R functions
+drop_var <- c("chas","num_no_miss_vars") #dropping chas as its categorical variable and can not be used in correlation
+num.housing.df <- housing.df[, !(names(housing.df) %in% drop_var)]
+round(cor(num.housing.df),2)
+
+#round(cor(boston.housing.df),2)
+
+  ### heatmap with values (use 'gplots' package)
+# heatmap.2(cor(num.housing.df), cellnote = round(cor(num.housing.df),2),
+#           dendrogram = "none", key = FALSE, trace = "none", margins = c(10,10),
+#           notecol = "black")
+
+heatmap.2(cor(num.housing.df), dendrogram = "none", 
+          cellnote = round(cor(num.housing.df),2), notecol = "navy", 
+          key = FALSE, trace = "none")
+
+# if correlation is high for 2 elements, we can pick one of the 2 variables without loosing much information and drop the other.
+
+```
+
+
+
+
+```{r freq}
+table(housing.df$chas)
+
+# Frequency Table by multiple categorical variables
+# convert to numerical variable to categorical
+housing.df$rm.bin <- .bincode(housing.df$rm, c(1:9))
+
+    ### compute the average of MEDV by (binned) RM and CHAS
+aggregate(housing.df$medv, by=list(rm=housing.df$rm.bin, 
+                                          chas=housing.df$chas), FUN=mean) 
+
+```
+# Here houses with rm=8, chas=1, has lower prices then rm=7 and chas=1 which suggests we should look at the data and understand what other factors might be affecting the prices
+
+```{r pivotTable}
+
+mlt <- melt(housing.df, id=c("rm.bin", "chas"), measure=c("medv"))
+head(mlt, 5)
+
+# use cast() to reshape data and generate pivot table
+cast(mlt, rm.bin ~ chas, subset=variable=="medv", 
+     margins=c("grand_row", "grand_col"), mean)
+
+
+# Distribution using Barplot (using 'ggmap' package)
+tbl <- table(housing.df$cat.medv, housing.df$zn)
+prop.tbl <- prop.table(tbl, margin=2)
+barplot(prop.tbl, col =c("navy", "orange"), space = 1.5, border = NA, 
+        xlab="ZN", ylab="", yaxt="n", main="Distribution of cat.medv by zn")
+axis(2, at=(seq(0,1, 0.2)), paste(seq(0,100,20), "%"))
+
+
+```
+#Above we see 17.5 , 85-100 we see they are all golden which suggests that they might have similar characteristics and so we can combine them togetherand therefore reduce the categories.
+#Example 4 zipcodes having similar revenue, we can combine them to reduce the number of variables awithout reducing the information
+
+### Principal Component Analysis
+#This is an unsupervised learning technique and therefore does not have any label to the data
+```{r PCA, warning= FALSE}
+## Read in Cereals data
+cereals.df <- read.csv("Cereals.csv")
+str(cereals.df)
+
+### compute PCs on two dimensions
+pcs <- prcomp(data.frame(cereals.df$calories, cereals.df$rating)) 
+summary(pcs) 
+pcs$rot # rotation matrix
+scores <- pcs$x
+head(scores, 5)
+
+  ### PCA on 13 variables, dropping first 3 variables
+pcs13 <- prcomp(na.omit(cereals.df[,-c(1:3)])) 
+summary(pcs13)
+pcs13$rot
+
+  ### PCA using Normalized variables as we see some variables are measured in g and some mg hence there is huge difference , hence we need to make the variables uniteless by dividing with the Standard deviation and re run the PCA
+pcs.cor <- prcomp(na.omit(cereals.df[,-c(1:3)]), scale. = T)
+summary(pcs.cor)
+pcs.cor$rot
+
+```
+
+  #reading above output , instead of using 13 variables we can use 3-4 PC to achieve approx 95%, but it is less interpretable as each PC is composed of all 13 variables
+  
