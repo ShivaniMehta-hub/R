@@ -1,0 +1,180 @@
+---
+title: "Regularized Regression"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+date: "`r Sys.Date()`"
+subtitle: (using Boston Housing data)
+---
+
+\  
+\  
+__Load Required Packages:__
+```{r loadpackages, message = FALSE, warning = FALSE}
+pacman::p_load(caret, corrplot, glmnet, mlbench, tidyverse)
+```
+
+\  
+__Import Data - Boston Housing:__
+```{r readdata, warning=FALSE}
+data("BostonHousing")
+bhousing <- BostonHousing
+dim(bhousing)
+str(bhousing)
+
+  # Check correlation between numeric features
+bhousing_corr <- bhousing[, c(-4, -14)]
+cor(bhousing_corr)
+corrplot(cor(bhousing_corr),
+         method = "pie", 
+         type = "upper",
+         order = "hclust",
+         tl.srt = 45)
+```
+
+\  
+__Create Data Partitions:__
+```{r datapartition}
+set.seed(123)
+# randomly order the dataset
+rows <- sample(nrow(bhousing))
+bhousing <- bhousing[rows, ]
+
+# find rows to split on
+split <- round(nrow(bhousing) * 0.8)
+train.df <- bhousing[1:split, ]
+test.df <- bhousing[(split+1):nrow(bhousing), ]
+
+# confirm the size of the split
+round(nrow(train.df)/nrow(bhousing), digits = 3)
+```
+
+\  
+__Set up CrossValidation:__  
+```{r customcontrol}
+# Custom Control Parameters
+tr <- trainControl(method = "repeatedcv", 
+                          number = 10, repeats = 3,
+                          verboseIter = TRUE)
+```
+\  
+\  
+__Linear Regression using CARET and CrossValidation:__  
+```{r linearregression}
+set.seed(123)
+lm <- train(medv~., train.df, method = 'lm',
+               trControl = tr)
+
+  # check results
+lm
+summary(lm) 
+lm$results
+plot(lm$finalModel)
+```
+  
+\  
+\  
+__Ridge Regression:__  
+```{r ridgeregression}
+set.seed(123)
+ridgeReg <- train(medv~., train.df, method = 'glmnet',
+               tuneGrid = expand.grid(alpha = 0, 
+                                      lambda = seq(0.0001, 1, length = 5)),
+               trControl = tr)
+  # print results
+print(ridgeReg)
+
+ # plot results
+plot(ridgeReg)
+plot(ridgeReg$finalModel, xvar = 'lambda', lwd =1.4, label = TRUE)
+plot(varImp(ridgeReg, scale = TRUE))
+```
+  
+\  
+\  
+__Lasso Regression:__
+```{r lassoregression}
+set.seed(123)
+lassoReg <- train(medv~., train.df, method = 'glmnet',
+               tuneGrid = expand.grid(alpha = 1, 
+                                      lambda = seq(0.0001, 0.3, length = 10)),
+               trControl = tr)
+
+  # print results
+print(lassoReg)
+
+ # plot results
+plot(lassoReg)
+plot(lassoReg$finalModel, xvar = 'lambda', lwd =1.4, label=TRUE)
+plot(varImp(lassoReg, scale = TRUE))
+
+```
+
+\  
+\  
+__Elastic-Net Regression:__ 
+\  
+```{r elasticnet}
+set.seed(123)
+enetReg <- train(medv~., train.df, method = 'glmnet',
+               tuneGrid = expand.grid(alpha = seq(0, 1, length = 10), 
+                                      lambda = seq(0.0001, 0.3, length = 10)),
+               trControl = tr)
+  # print best-tuned results
+enetReg$bestTune
+
+ # plot results
+plot(enetReg)  # alpha is the mixing parameter and lambda is the regularization parameter
+plot(enetReg$finalModel, xvar = 'lambda', lwd =1.4, label=TRUE)
+plot(varImp(enetReg, scale = TRUE))
+```
+
+\                      
+__Compare Models:__
+Models with lowest RMSE, MAE? highest R2?
+\  
+```{r comparemodels}
+  # create a list of above models
+model_list <- list(Linear = lm, 
+                   Ridge = ridgeReg, 
+                   Lasso = lassoReg, 
+                   ElasticNet = enetReg)
+compare <- resamples(model_list)
+  # Compare summary of models
+summary(compare)
+
+  # Plot errors from two of the four above models
+xyplot(compare, model = c("Ridge", "Lasso"), 
+       metric = 'RMSE')
+
+```
+
+\  
+
+_In the above chart, Ridge regression has a higher RMSE if a point lies above the dotted line and Lasso has a higher RMSE if a point lies below the dotted line._  
+\  
+
+__Choose the Best model from ElasticNet:__
+```{r bestmodel}
+best <- enetReg$finalModel
+coef(best, s = enetReg$bestTune$lambda)
+```
+
+\  
+__Generate Prediction Errors:__    
+\  
+
+_Compare the errors: Do the errors make sense? Can we improve the model?_  
+```{r prediction}
+  # Prediction Error: Training Data 
+pred1 <- predict(enetReg, train.df)
+error1 <- (train.df$medv - pred1)
+sqrt(mean((error1)^2))
+  # Prediction Error: Test Data
+pred2 <- predict(enetReg, test.df)
+error2 <- (test.df$medv - pred2)
+sqrt(mean((error2)^2))
+
+```
