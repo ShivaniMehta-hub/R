@@ -1,0 +1,136 @@
+---
+title: "Assignment1"
+author: "Group 5 - 
+ Sourabh Bodkhe,
+ Manali Thorat,
+ Shivani Mehta,
+ Jatan Rathod,
+ Anvay Thakare"
+date: "2/7/2020"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+# *Assignment 1 *
+
+
+### Load packages and check loading  
+```{r loadPackages, warning=FALSE, message=FALSE, results='hide'}
+#Importing the Utilities.csv in to a data table
+if(!require("data.table")) install.packages("data.table")
+
+utilities.dT<-fread("Utilities.csv")
+
+```
+
+
+1.Compute the minimum, maximum, mean, median, and standard deviation for
+each of the numeric variables using data.table package. Which variable(s) has the largest variability? Explain your answer.
+
+```{r}
+#Mean
+utility_mean<-utilities.dT[, lapply(.SD, mean),.SDcols = c("Fixed_charge","RoR","Cost","Load_factor",	"Demand_growth","Sales","Nuclear",	"Fuel_Cost")]
+#Median
+utility_median<-utilities.dT[, lapply(.SD, median), .SDcols = c("Fixed_charge","RoR","Cost","Load_factor",	"Demand_growth","Sales","Nuclear",	"Fuel_Cost")]
+#Standard Deviation
+utility_sd<-utilities.dT[, lapply(.SD, sd), .SDcols = c("Fixed_charge","RoR","Cost","Load_factor",	"Demand_growth","Sales","Nuclear",	"Fuel_Cost")]
+#Minimum
+utility_min<-utilities.dT[, lapply(.SD, min), .SDcols = c("Fixed_charge","RoR","Cost","Load_factor",	"Demand_growth","Sales","Nuclear",	"Fuel_Cost")]
+#Maximum
+utility_max<-utilities.dT[, lapply(.SD, max), .SDcols = c("Fixed_charge","RoR","Cost","Load_factor",	"Demand_growth","Sales","Nuclear",	"Fuel_Cost")]
+  utilities_stats_matrix <- matrix(c(utility_mean, utility_median, utility_sd, utility_min, utility_max), nrow = 5, ncol = 8, byrow = TRUE)
+  colnames(utilities_stats_matrix) <- c("Fixed_Charge", "RoR", "Cost", "Load_factor", "Demand_growth", "Sales", "Nuclear", "Fuel_Cost")
+  rownames(utilities_stats_matrix)<-(c("Mean", "Median", "StdDev","Minimum", "Maximum"))
+utilities_stats_matrix
+```
+Standardizing to find actual variance in the data
+
+```{r}
+coefficient.variation<-utility_sd/utility_mean
+coefficient.variation
+```
+Interpretation:
+From the output above, we see Nuclear have the highest coefficient of variation followed by Demand_growth, Fuel_Cost, Sales,Cost, RoR, Fixed_Charge and Load_Factor.Since high coefficient of variation suggest higher variability, we can conclude that Nuclear has the largest variability.
+
+
+2. Create boxplots for each of the numeric variables. Are there any extreme values for any of the variables? Which ones? Explain your answer.
+
+```{r}
+if(!require("ggplot2")) install.packages("ggplot2")
+ggplot(stack(utilities.dT[,2]), aes(x = ind, y = values)) +
+  geom_boxplot() + labs(title= "  Boxplot for Fixed Charge variable ")
+
+ggplot(stack(utilities.dT[,3]), aes(x = ind, y = values)) +
+  geom_boxplot() + labs(title= "  Boxplot for RoR variable ")
+
+ggplot(stack(utilities.dT[,4]), aes(x = ind, y = values)) +
+  geom_boxplot() + labs(title= "  Boxplot for Cost variable ")
+
+ggplot(stack(utilities.dT[,5]), aes(x = ind, y = values)) +
+  geom_boxplot() + labs(title= "  Boxplot for Load_Factor variable ")
+
+ggplot(stack(utilities.dT[,6]), aes(x = ind, y = values)) +
+  geom_boxplot() + labs(title= "  Boxplot for Demand_growth variable ")
+
+ggplot(stack(utilities.dT[,7]), aes(x = ind, y = values)) +
+  geom_boxplot() + labs(title= "  Boxplot for Sales variable ")
+
+ggplot(stack(utilities.dT[,8]), aes(x = ind, y = values)) +
+  geom_boxplot() + labs(title= "  Boxplot for Nuclear variable ")
+
+ggplot(stack(utilities.dT[,9]), aes(x = ind, y = values)) +
+  geom_boxplot() + labs(title= "  Boxplot for Fuest_Cost variable ")
+
+```
+
+Interpretation:
+Yes, Sales and Fixed Charge variables have extreme values, as we can see from the points lying outside the ends of the whiskers which is 1.5*InterQuartile Range also called outliers.
+Values of Outliers for Sales: 17441, 15991
+Values of Outliers Fixed Chargs: 1.49, 1.43, 0.75 and 0.76
+
+3.Create a heatmap for the numeric variables. Discuss any interesting trend you see in this chart.
+
+```{r Heatmaps, warning=FALSE, message=FALSE}
+library(reshape)
+cor.mat <- round(cor(utilities.dT[,!c("Company")]),2) #rounded correlation matrix 
+melted.cor.mat <- melt(cor.mat) 
+ggplot(melted.cor.mat, aes(x = X1, y = X2, fill = value)) + 
+  scale_fill_gradient(low="wheat", high="orangered") +
+  geom_tile() + 
+  geom_text(aes(x = X1, y = X2, label = value)) +
+  ggtitle("Which Variables Are Highly Correlated?")
+```
+Interpretation:
+1. The darker color in the heat map shows higher correlation between the two variables, here RoR has a positive correlation with Fixed_charge of 0.64 which is closer to +1.
+2.Similary, Sales and Fuel_Cost have a negative correlation of -0.56 which is closer to -1.
+3. Fuel_Cost and cost have coefficient of correlation is 0.01 ~ 0, hence there is no liner relationship between the two.
+
+
+4. Run principal component analysis using unscaled numeric variables in the
+dataset. How do you interpret the results from this model?
+
+
+```{r}
+#PCA on all components
+pca <- prcomp(na.omit(utilities.dT[,!c("Company")]))
+summary(pca)
+#Performing rotational matrix
+pca$rotation
+
+```
+Interpretation:
+Without standardizing the data set principal component 1 (PC1) alone accounts towards 99.98% of the variance. But in order to give equal emphasis on each variable we should scale the data.
+
+
+5. Next, run principal component model after scaling the numeric variables. Did the results/interpretations change? How so? Explain your answers.
+
+```{r}
+pca.cor <- prcomp(na.omit(utilities.dT[,!c("Company")]), scale. = T)# Normalizing the data
+summary(pca.cor)
+#Performing rotational matrix
+pca.cor$rotation
+
+```
+Interpretation:
+Without standardizing the result only 1 principal component was counted towards whole variance but after normalizing the data we can see that each principal component accounts for some variance. Even if we consider first 6 principal components, we get total variance as 95.11.
